@@ -52,6 +52,8 @@ export function TemplateSearch() {
   const [expanded, setExpanded] = useState<MemeTemplate | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [hardReloadTick, setHardReloadTick] = useState(0);
+  const [hardReloading, setHardReloading] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [tagBusy, setTagBusy] = useState(false);
   const [tagError, setTagError] = useState<string | null>(null);
@@ -69,6 +71,29 @@ export function TemplateSearch() {
       .slice(0, 50);
   }, [allTags, selectedTags, tagQuery]);
 
+  const buildEndpoint = useCallback(
+    (opts?: { offset?: number; force?: boolean }) => {
+      const offset = opts?.offset ?? 0;
+      const force = opts?.force ?? false;
+      if (isFyp) {
+        const params = new URLSearchParams({
+          offset: `${offset}`,
+          limit: `${PAGE_SIZE}`,
+        });
+        if (force) params.set("force", "1");
+        return `/api/templates/recent?${params.toString()}`;
+      }
+
+      const params = new URLSearchParams({
+        q: query,
+        tags: tags.join(","),
+      });
+      if (force) params.set("force", "1");
+      return `/api/templates/search?${params.toString()}`;
+    },
+    [isFyp, query, tags],
+  );
+
   const fetchTags = useCallback(async () => {
     if (allTags.length || loadingTags) return;
     setLoadingTags(true);
@@ -85,14 +110,10 @@ export function TemplateSearch() {
     const controller = new AbortController();
     void (async () => {
       setLoading(true);
-      const cacheKey = isFyp
-        ? `/api/templates/recent?offset=0&limit=${PAGE_SIZE}`
-        : `/api/templates/search?${new URLSearchParams({
-            q: query,
-            tags: tags.join(","),
-          }).toString()}`;
+      const force = hardReloadTick > 0;
+      const cacheKey = buildEndpoint({ offset: 0, force });
       const cached = requestCache.current.get(cacheKey);
-      if (cached) {
+      if (cached && !force) {
         setItems(cached);
         setPage(1);
         setHasMore(cached.length === PAGE_SIZE);
@@ -101,7 +122,7 @@ export function TemplateSearch() {
       }
 
       const persisted = readLocalTemplateCache(cacheKey);
-      if (persisted) {
+      if (persisted && !force) {
         requestCache.current.set(cacheKey, persisted);
         setItems(persisted);
         setPage(1);
@@ -129,7 +150,7 @@ export function TemplateSearch() {
     return () => {
       controller.abort();
     };
-  }, [isFyp, query, tags]);
+  }, [buildEndpoint, hardReloadTick]);
 
   useEffect(() => {
     if (!showTagMenu) return;
@@ -165,7 +186,7 @@ export function TemplateSearch() {
 
   useEffect(() => {
     if (!isFyp || loading || items.length === 0 || !hasMore) return;
-    const endpoint = `/api/templates/recent?offset=${PAGE_SIZE}&limit=${PAGE_SIZE}`;
+    const endpoint = buildEndpoint({ offset: PAGE_SIZE });
     if (requestCache.current.has(endpoint)) return;
 
     const run = () => {
@@ -191,7 +212,7 @@ export function TemplateSearch() {
 
     const timer = globalThis.setTimeout(run, 250);
     return () => globalThis.clearTimeout(timer);
-  }, [hasMore, isFyp, items.length, loading]);
+  }, [buildEndpoint, hasMore, isFyp, items.length, loading]);
 
   useEffect(() => {
     if (!isFyp) return;
@@ -208,7 +229,7 @@ export function TemplateSearch() {
           setLoadingMore(true);
           try {
             const offset = page * PAGE_SIZE;
-            const endpoint = `/api/templates/recent?offset=${offset}&limit=${PAGE_SIZE}`;
+            const endpoint = buildEndpoint({ offset });
             const cached = requestCache.current.get(endpoint);
             const persisted = cached ? null : readLocalTemplateCache(endpoint);
             const nextItems = cached
@@ -234,7 +255,35 @@ export function TemplateSearch() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, isFyp, loading, loadingMore, page]);
+  }, [buildEndpoint, hasMore, isFyp, loading, loadingMore, page]);
+
+  const hardReloadAll = async () => {
+    if (hardReloading) return;
+    setHardReloading(true);
+    try {
+      requestCache.current.clear();
+      hydratedImageUrls.current.clear();
+
+      if (typeof window !== "undefined") {
+        Object.keys(window.localStorage).forEach((key) => {
+          if (key.startsWith(LOCAL_FEED_CACHE_PREFIX)) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
+
+      if (typeof window !== "undefined" && "caches" in window) {
+        await Promise.all([
+          caches.delete(IMAGE_CACHE_NAME),
+          caches.delete("meme-vault-v1-api"),
+        ]);
+      }
+
+      setHardReloadTick((value) => value + 1);
+    } finally {
+      setHardReloading(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -416,6 +465,16 @@ export function TemplateSearch() {
             </div>
           ) : null}
         </div>
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => void hardReloadAll()}
+          disabled={hardReloading}
+          className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {hardReloading ? "Refreshing..." : "Hard Reload"}
+        </button>
       </div>
 
       {loading && items.length === 0 ? (

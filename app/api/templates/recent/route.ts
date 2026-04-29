@@ -9,16 +9,19 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const offset = Number(searchParams.get("offset") ?? "0");
   const limitRaw = Number(searchParams.get("limit") ?? `${DEFAULT_LIMIT}`);
+  const force = searchParams.get("force") === "1";
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
   const safeLimit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.floor(limitRaw), 1), 40) : DEFAULT_LIMIT;
   const cacheKey = `feed:recent:v4:${safeOffset}:${safeLimit}`;
 
-  const cached = await cacheGetJson<unknown[]>(cacheKey);
-  if (cached) {
-    return NextResponse.json(
-      { data: cached },
-      { headers: { "Cache-Control": "public, s-maxage=20, stale-while-revalidate=120" } },
-    );
+  if (!force) {
+    const cached = await cacheGetJson<unknown[]>(cacheKey);
+    if (cached) {
+      return NextResponse.json(
+        { data: cached },
+        { headers: { "Cache-Control": "public, s-maxage=20, stale-while-revalidate=120" } },
+      );
+    }
   }
 
   const supabase = getServiceSupabase();
