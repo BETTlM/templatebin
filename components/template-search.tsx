@@ -461,9 +461,9 @@ export function TemplateSearch() {
       {loadingMore ? <p className="text-xs text-zinc-500">Loading more...</p> : null}
 
       {expanded ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="grid w-full max-w-6xl gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl shadow-black md:grid-cols-[1fr_280px]">
-            <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-black p-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="grid w-full max-w-6xl gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl shadow-black md:grid-cols-[1fr_280px] md:items-center">
+            <div className="flex min-h-0 max-h-[85vh] items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-black p-2">
               {expanded.preview_url ? (
                 <Image
                   src={expanded.preview_url}
@@ -477,7 +477,7 @@ export function TemplateSearch() {
               ) : null}
             </div>
 
-            <aside className="flex max-h-[78vh] flex-col overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+            <aside className="flex max-h-[85vh] flex-col overflow-auto rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <h3 className="text-lg font-semibold text-zinc-100">{expanded.title}</h3>
                 <button
