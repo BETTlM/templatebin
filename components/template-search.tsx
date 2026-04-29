@@ -23,6 +23,9 @@ export function TemplateSearch() {
   const [expanded, setExpanded] = useState<MemeTemplate | null>(null);
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [newTag, setNewTag] = useState("");
+  const [tagBusy, setTagBusy] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
   const requestCache = useRef(new Map<string, MemeTemplate[]>());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
@@ -50,7 +53,7 @@ export function TemplateSearch() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setTimeout(async () => {
+    void (async () => {
       setLoading(true);
       const cacheKey = isFyp
         ? `/api/templates/recent?offset=0&limit=${PAGE_SIZE}`
@@ -80,10 +83,9 @@ export function TemplateSearch() {
       } finally {
         setLoading(false);
       }
-    }, 250);
+    })();
 
     return () => {
-      clearTimeout(timer);
       controller.abort();
     };
   }, [isFyp, query, tags]);
@@ -113,6 +115,12 @@ export function TemplateSearch() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [expanded, showTagMenu]);
+
+  const openExpanded = (item: MemeTemplate) => {
+    setExpanded(item);
+    setNewTag("");
+    setTagError(null);
+  };
 
   useEffect(() => {
     if (!isFyp || loading || items.length === 0 || !hasMore) return;
@@ -207,6 +215,58 @@ export function TemplateSearch() {
     }
   };
 
+  const syncTemplateTags = (templateId: string, tags: string[]) => {
+    setItems((current) => current.map((item) => (item.id === templateId ? { ...item, tags } : item)));
+    setExpanded((current) => (current && current.id === templateId ? { ...current, tags } : current));
+  };
+
+  const addTagToExpanded = async () => {
+    if (!expanded) return;
+    const tag = newTag.trim();
+    if (!tag || tagBusy) return;
+    setTagBusy(true);
+    setTagError(null);
+    try {
+      const response = await fetch(`/api/templates/${expanded.id}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { tags?: string[]; error?: string };
+      if (!response.ok || !payload.tags) {
+        throw new Error(payload.error ?? "Failed to add tag");
+      }
+      syncTemplateTags(expanded.id, payload.tags);
+      setNewTag("");
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : "Failed to add tag");
+    } finally {
+      setTagBusy(false);
+    }
+  };
+
+  const removeTagFromExpanded = async (tag: string) => {
+    if (!expanded || tagBusy) return;
+    setTagBusy(true);
+    setTagError(null);
+    try {
+      const response = await fetch(`/api/templates/${expanded.id}/tags`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { tags?: string[]; error?: string };
+      if (!response.ok || !payload.tags) {
+        throw new Error(payload.error ?? "Failed to remove tag");
+      }
+      syncTemplateTags(expanded.id, payload.tags);
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : "Failed to remove tag");
+    } finally {
+      setTagBusy(false);
+    }
+  };
+
   return (
     <section className="space-y-4">
       {selectedTags.length ? (
@@ -295,7 +355,7 @@ export function TemplateSearch() {
         </div>
       ) : null}
       <div className="columns-1 gap-4 sm:columns-2 xl:columns-4">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <article
             key={item.id}
             className="group mb-4 break-inside-avoid rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-2.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition hover:border-zinc-700/90"
@@ -303,7 +363,7 @@ export function TemplateSearch() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setExpanded(item)}
+                onClick={() => openExpanded(item)}
                 className="w-full overflow-hidden rounded-xl border border-zinc-800/80 bg-black"
               >
                 {item.preview_url ? (
@@ -313,6 +373,9 @@ export function TemplateSearch() {
                     width={item.width ?? 1200}
                     height={item.height ?? 1200}
                     sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+                    loading={index < 2 ? "eager" : "lazy"}
+                    priority={index < 2}
+                    unoptimized
                     className="h-auto w-full object-cover"
                   />
                 ) : (
@@ -363,6 +426,7 @@ export function TemplateSearch() {
                   width={expanded.width ?? 1600}
                   height={expanded.height ?? 1600}
                   sizes="(max-width: 1024px) 90vw, 70vw"
+                  unoptimized
                   className="max-h-[78vh] w-auto max-w-full rounded-lg object-contain"
                 />
               ) : null}
@@ -385,10 +449,49 @@ export function TemplateSearch() {
                   <span className="text-zinc-500">Uploader: </span>
                   {expanded.uploader_name?.trim() ? expanded.uploader_name : "anon"}
                 </p>
-                <p className="text-zinc-300">
-                  <span className="text-zinc-500">Tags: </span>
-                  {expanded.tags.length ? expanded.tags.join(", ") : "-"}
-                </p>
+                <div>
+                  <p className="mb-1 text-zinc-500">Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {expanded.tags.length ? (
+                      expanded.tags.map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => void removeTagFromExpanded(tag)}
+                          disabled={tagBusy}
+                          className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-xs text-zinc-200 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          title="Remove tag"
+                        >
+                          {tag}
+                          <X size={11} />
+                        </button>
+                      ))
+                    ) : (
+                      <span className="text-zinc-400">-</span>
+                    )}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={newTag}
+                      onChange={(event) => setNewTag(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void addTagToExpanded();
+                      }}
+                      placeholder="Add tag"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-zinc-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void addTagToExpanded()}
+                      disabled={tagBusy || !newTag.trim()}
+                      className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-100 transition hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {tagBusy ? "..." : "Add"}
+                    </button>
+                  </div>
+                </div>
                 <p className="text-zinc-300">
                   <span className="text-zinc-500">Type: </span>
                   {expanded.mime_type}
@@ -406,6 +509,7 @@ export function TemplateSearch() {
                   {new Date(expanded.created_at).toLocaleString()}
                 </p>
               </div>
+              {tagError ? <p className="mt-2 text-xs text-rose-300">{tagError}</p> : null}
 
               <a
                 className="mt-4 inline-flex w-full items-center justify-center rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-100 transition hover:border-zinc-500"

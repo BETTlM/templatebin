@@ -103,8 +103,8 @@ as $$
   )
   select id, title, storage_path, mime_type, tags, width, height, uploader_name, download_count, created_at
   from scored
-  order by (trigram_score * 0.6 + fts_score * 0.3 + (1 / (1 + extract(epoch from now() - created_at) / 86400)) * 0.1) desc,
-    created_at desc
+  order by (trigram_score * 0.7 + fts_score * 0.3) desc,
+    char_length(title) asc
   limit greatest(1, least(result_limit, 50));
 $$;
 

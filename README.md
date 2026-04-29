@@ -34,6 +34,10 @@ Run the SQL in `supabase/migrations/0001_init_meme_templates.sql` in your Supaba
 - Keep bucket private and download via signed URLs.
 - Set a strong `IP_HASH_SALT` before production.
 
+## Performance Notes
+- For fastest image loading, set `SUPABASE_BUCKET_PUBLIC=true` and make the storage bucket public.
+- If you keep the bucket private, the app uses cached signed URLs automatically.
+
 ## Launch Checklist
 - Confirm bucket name in Supabase exactly matches `SUPABASE_STORAGE_BUCKET`.
 - Keep only production secrets in deployment environment variables (never commit `.env`).

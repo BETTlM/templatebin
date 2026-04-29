@@ -36,6 +36,7 @@ export function getEnv() {
     supabasePublishableKey,
     supabaseSecretKey,
     uploadBucket: process.env.SUPABASE_STORAGE_BUCKET ?? "meme-templates",
+    isPublicBucket: process.env.SUPABASE_BUCKET_PUBLIC === "true",
     ipSalt: process.env.IP_HASH_SALT ?? "change-me",
   };
 }

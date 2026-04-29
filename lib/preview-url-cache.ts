@@ -11,6 +11,20 @@ export async function getSignedPreviewMap(storagePaths: string[]) {
   const signedMap = new Map<string, string>();
   if (!uniquePaths.length) return signedMap;
 
+  const env = getEnv();
+  const supabase = getServiceSupabase();
+
+  // Public buckets are much faster: stable CDN URLs and no signing roundtrip.
+  if (env.isPublicBucket) {
+    uniquePaths.forEach((path) => {
+      const { data } = supabase.storage.from(env.uploadBucket).getPublicUrl(path);
+      if (data.publicUrl) {
+        signedMap.set(path, data.publicUrl);
+      }
+    });
+    return signedMap;
+  }
+
   const cacheHits = await Promise.all(
     uniquePaths.map(async (path) => ({
       path,
@@ -25,8 +39,6 @@ export async function getSignedPreviewMap(storagePaths: string[]) {
 
   if (!misses.length) return signedMap;
 
-  const supabase = getServiceSupabase();
-  const env = getEnv();
   const signed = await supabase.storage.from(env.uploadBucket).createSignedUrls(misses, 60 * 30);
 
   (signed.data ?? []).forEach((entry, index) => {

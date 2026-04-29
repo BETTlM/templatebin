@@ -49,12 +49,11 @@ export async function POST(request: Request) {
 
   const supabase = getServiceSupabase();
   const storagePath = buildStoragePath(file.name);
-  const arrayBuffer = await file.arrayBuffer();
   const env = getEnv();
 
   const uploadResult = await supabase.storage
     .from(env.uploadBucket)
-    .upload(storagePath, arrayBuffer, {
+    .upload(storagePath, file, {
       contentType: file.type,
       upsert: false,
     });

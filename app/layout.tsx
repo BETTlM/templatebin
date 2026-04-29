@@ -23,11 +23,22 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabaseHost = (() => {
+    try {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      return url ? new URL(url).origin : null;
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <head>
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+        {supabaseHost ? <link rel="preconnect" href={supabaseHost} crossOrigin="" /> : null}
+        {supabaseHost ? <link rel="dns-prefetch" href={supabaseHost.replace("https://", "//")} /> : null}
       </head>
       <body className="min-h-full bg-slate-950 text-slate-100 antialiased">
         {children}
