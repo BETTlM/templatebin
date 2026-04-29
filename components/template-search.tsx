@@ -8,6 +8,7 @@ import type { MemeTemplate } from "@/lib/types";
 const PAGE_SIZE = 24;
 const LOCAL_FEED_CACHE_PREFIX = "mv:feed:v1:";
 const LOCAL_FEED_CACHE_TTL_MS = 1000 * 60 * 10;
+const IMAGE_CACHE_NAME = "meme-vault-v1-images";
 type TagCount = { tag: string; count: number };
 
 function readLocalTemplateCache(key: string): MemeTemplate[] | null {
@@ -55,6 +56,7 @@ export function TemplateSearch() {
   const [tagBusy, setTagBusy] = useState(false);
   const [tagError, setTagError] = useState<string | null>(null);
   const requestCache = useRef(new Map<string, MemeTemplate[]>());
+  const hydratedImageUrls = useRef(new Set<string>());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const tagMenuRef = useRef<HTMLDivElement | null>(null);
   const tags = selectedTags;
@@ -233,6 +235,33 @@ export function TemplateSearch() {
     observer.observe(target);
     return () => observer.disconnect();
   }, [hasMore, isFyp, loading, loadingMore, page]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("caches" in window)) return;
+    if (!items.length) return;
+
+    const previewUrls = items.map((item) => item.preview_url).filter(Boolean) as string[];
+    if (!previewUrls.length) return;
+
+    void (async () => {
+      const imageCache = await caches.open(IMAGE_CACHE_NAME);
+      await Promise.all(
+        previewUrls.map(async (url) => {
+          if (hydratedImageUrls.current.has(url)) return;
+          hydratedImageUrls.current.add(url);
+
+          const cached = await imageCache.match(url);
+          if (cached) return;
+
+          // First-time user / cache miss: fetch from server and persist.
+          const response = await fetch(url, { cache: "force-cache" });
+          if (!response.ok) return;
+          await imageCache.put(url, response.clone());
+        }),
+      );
+    })();
+  }, [items]);
 
   const onCopyTemplate = async (item: MemeTemplate) => {
     if (!item.preview_url || !navigator.clipboard) return;
