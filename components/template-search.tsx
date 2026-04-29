@@ -6,7 +6,35 @@ import { Check, Copy, Search, X } from "lucide-react";
 import type { MemeTemplate } from "@/lib/types";
 
 const PAGE_SIZE = 24;
+const LOCAL_FEED_CACHE_PREFIX = "mv:feed:v1:";
+const LOCAL_FEED_CACHE_TTL_MS = 1000 * 60 * 10;
 type TagCount = { tag: string; count: number };
+
+function readLocalTemplateCache(key: string): MemeTemplate[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${LOCAL_FEED_CACHE_PREFIX}${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { ts: number; data: MemeTemplate[] };
+    if (!parsed?.ts || !Array.isArray(parsed.data)) return null;
+    if (Date.now() - parsed.ts > LOCAL_FEED_CACHE_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalTemplateCache(key: string, data: MemeTemplate[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      `${LOCAL_FEED_CACHE_PREFIX}${key}`,
+      JSON.stringify({ ts: Date.now(), data }),
+    );
+  } catch {
+    // ignore quota/storage failures
+  }
+}
 
 export function TemplateSearch() {
   const [query, setQuery] = useState("");
@@ -70,11 +98,22 @@ export function TemplateSearch() {
         return;
       }
 
+      const persisted = readLocalTemplateCache(cacheKey);
+      if (persisted) {
+        requestCache.current.set(cacheKey, persisted);
+        setItems(persisted);
+        setPage(1);
+        setHasMore(persisted.length === PAGE_SIZE);
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await fetch(cacheKey, { signal: controller.signal });
         const payload = (await response.json()) as { data: MemeTemplate[] };
         const nextItems = payload.data ?? [];
         requestCache.current.set(cacheKey, nextItems);
+        writeLocalTemplateCache(cacheKey, nextItems);
         setItems(nextItems);
         setPage(1);
         setHasMore(isFyp ? nextItems.length === PAGE_SIZE : false);
@@ -131,7 +170,9 @@ export function TemplateSearch() {
       void fetch(endpoint)
         .then((response) => response.json() as Promise<{ data: MemeTemplate[] }>)
         .then((payload) => {
-          requestCache.current.set(endpoint, payload.data ?? []);
+          const next = payload.data ?? [];
+          requestCache.current.set(endpoint, next);
+          writeLocalTemplateCache(endpoint, next);
         })
         .catch(() => {});
     };
@@ -167,13 +208,17 @@ export function TemplateSearch() {
             const offset = page * PAGE_SIZE;
             const endpoint = `/api/templates/recent?offset=${offset}&limit=${PAGE_SIZE}`;
             const cached = requestCache.current.get(endpoint);
+            const persisted = cached ? null : readLocalTemplateCache(endpoint);
             const nextItems = cached
               ? cached
-              : await fetch(endpoint)
-                  .then((response) => response.json() as Promise<{ data: MemeTemplate[] }>)
-                  .then((payload) => payload.data ?? []);
+              : persisted
+                ? persisted
+                : await fetch(endpoint)
+                    .then((response) => response.json() as Promise<{ data: MemeTemplate[] }>)
+                    .then((payload) => payload.data ?? []);
 
             requestCache.current.set(endpoint, nextItems);
+            writeLocalTemplateCache(endpoint, nextItems);
             setItems((current) => [...current, ...nextItems]);
             setPage((current) => current + 1);
             setHasMore(nextItems.length === PAGE_SIZE);

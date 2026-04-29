@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,6 +42,7 @@ export default function RootLayout({
         {supabaseHost ? <link rel="dns-prefetch" href={supabaseHost.replace("https://", "//")} /> : null}
       </head>
       <body className="min-h-full bg-slate-950 text-slate-100 antialiased">
+        <ServiceWorkerRegister />
         {children}
       </body>
       <Analytics />
