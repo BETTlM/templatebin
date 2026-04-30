@@ -549,8 +549,9 @@ export function TemplateSearch() {
       {loadingMore ? <p className="text-xs text-zinc-500">Loading more...</p> : null}
 
       {expanded ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="grid w-full max-w-6xl gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl shadow-black md:grid-cols-[1fr_280px] md:items-center">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm">
+          <div className="absolute top-1/2 left-1/2 w-[min(96vw,1100px)] max-h-[calc(100vh-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl shadow-black">
+            <div className="grid gap-4 md:grid-cols-[1fr_280px] md:items-center">
             <div className="flex min-h-0 max-h-[85vh] items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-black p-2">
               {expanded.preview_url ? (
                 <Image
@@ -652,6 +653,7 @@ export function TemplateSearch() {
                 Download
               </a>
             </aside>
+            </div>
           </div>
         </div>
       ) : null}
